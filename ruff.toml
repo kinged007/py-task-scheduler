@@ -1,0 +1,10 @@
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E402", "E501"]
+# E402: sys.path insertion before imports is idiomatic in this repo
+# E501: line-too-long left to formatter
+
+[format]
+quote-style = "double"

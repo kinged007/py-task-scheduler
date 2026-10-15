@@ -2,82 +2,85 @@
 Core task scheduler implementation
 """
 
-import time
 import signal
 import sys
-import threading
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict
+
 import schedule
-import yaml
 from loguru import logger
 
 try:
     import setproctitle
+
     HAS_SETPROCTITLE = True
 except ImportError:
     HAS_SETPROCTITLE = False
 
-from .task_parser import TaskParser, TaskFile
-from .database import DatabaseManager, TaskSchedule
+from .database import DatabaseManager
+from .decorators import ScheduleManager, TaskTracker, set_task_tracker
+from .logging_config import StructuredLogger
+from .memory_manager import MemoryManager, ResourceMonitor, TaskModuleManager
+from .task_parser import TaskFile, TaskParser
 from .venv_manager import VirtualEnvironmentManager
-from .memory_manager import MemoryManager, TaskModuleManager, ResourceMonitor
-from .decorators import TaskTracker, ScheduleManager, set_task_tracker
-from .logging_config import LoggingManager, StructuredLogger
 
 
 class TaskScheduler:
     """Main task scheduler class"""
-    
+
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self.config = self._load_config()
         self.running = False
         self.restart_requested = False
-        
+
         # Initialize components
         self.base_dir = config_path.parent.parent
-        self.tasks_dir = self.base_dir / self.config['tasks']['directory']
+        self.tasks_dir = self.base_dir / self.config["tasks"]["directory"]
         self.logs_dir = self.base_dir / "logs"
         self.data_dir = self.base_dir / "data"
-        
+
         # Create directories
         for directory in [self.tasks_dir, self.logs_dir, self.data_dir]:
             directory.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize managers
-        self.db_manager = DatabaseManager(self.data_dir / self.config['database']['path'])
+        self.db_manager = DatabaseManager(self.data_dir / self.config["database"]["path"])
         self.task_parser = TaskParser()
         self.venv_manager = VirtualEnvironmentManager(
-            self.base_dir / self.config['virtual_env']['path'],
-            self.config['virtual_env']['python_executable']
+            self.base_dir / self.config["virtual_env"]["path"],
+            self.config["virtual_env"]["python_executable"],
         )
-        self.memory_manager = MemoryManager(self.config['scheduler']['max_memory_usage'])
+        self.memory_manager = MemoryManager(self.config["scheduler"]["max_memory_usage"])
         self.task_module_manager = TaskModuleManager()
         self.resource_monitor = ResourceMonitor(self.memory_manager)
-        
+
         # Initialize tracking
         self.task_tracker = TaskTracker(self.db_manager)
         set_task_tracker(self.task_tracker)
         self.schedule_manager = ScheduleManager(self.db_manager)
-        
+
         # Track loaded tasks
         self._loaded_tasks: Dict[str, TaskFile] = {}
         self._last_scan_time = 0
 
         # Track config file changes
-        self._config_last_modified = self.config_path.stat().st_mtime if self.config_path.exists() else 0
-        
+        self._config_last_modified = (
+            self.config_path.stat().st_mtime if self.config_path.exists() else 0
+        )
+
         # Setup signal handlers
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
-    
+
     def _load_config(self) -> Dict:
         """Load configuration from YAML file"""
         try:
             # Import here to avoid circular imports
             from helpers.config_loader import load_config
+
             config_name = self.config_path.name
             return load_config(config_name)
         except Exception as e:
@@ -101,13 +104,15 @@ class TaskScheduler:
                 config_changed = False
 
                 # Check if memory settings changed
-                if old_config.get('scheduler', {}).get('max_memory_usage') != self.config.get('scheduler', {}).get('max_memory_usage'):
+                if old_config.get("scheduler", {}).get("max_memory_usage") != self.config.get(
+                    "scheduler", {}
+                ).get("max_memory_usage"):
                     logger.info("Memory usage limit changed, updating memory manager")
-                    self.memory_manager.max_memory_mb = self.config['scheduler']['max_memory_usage']
+                    self.memory_manager.max_memory_mb = self.config["scheduler"]["max_memory_usage"]
                     config_changed = True
 
                 # Check if task directory changed
-                new_tasks_dir = self.base_dir / self.config['tasks']['directory']
+                new_tasks_dir = self.base_dir / self.config["tasks"]["directory"]
                 if new_tasks_dir != self.tasks_dir:
                     logger.info(f"Tasks directory changed from {self.tasks_dir} to {new_tasks_dir}")
                     self.tasks_dir = new_tasks_dir
@@ -115,13 +120,15 @@ class TaskScheduler:
                     config_changed = True
 
                 # Check if virtual environment settings changed
-                new_venv_path = self.base_dir / self.config['virtual_env']['path']
-                if (new_venv_path != self.venv_manager.venv_path or
-                    self.config['virtual_env']['python_executable'] != self.venv_manager.python_executable):
+                new_venv_path = self.base_dir / self.config["virtual_env"]["path"]
+                if (
+                    new_venv_path != self.venv_manager.venv_path
+                    or self.config["virtual_env"]["python_executable"]
+                    != self.venv_manager.python_executable
+                ):
                     logger.info("Virtual environment settings changed, updating venv manager")
                     self.venv_manager = VirtualEnvironmentManager(
-                        new_venv_path,
-                        self.config['virtual_env']['python_executable']
+                        new_venv_path, self.config["virtual_env"]["python_executable"]
                     )
                     config_changed = True
 
@@ -161,7 +168,7 @@ class TaskScheduler:
         """Handle shutdown signals"""
         logger.info(f"Received signal {signum}, shutting down gracefully...")
         self.stop()
-    
+
     def start(self):
         """Start the task scheduler"""
         logger.info("Starting Task Scheduler")
@@ -173,25 +180,25 @@ class TaskScheduler:
         if not self.venv_manager.ensure_virtual_environment():
             logger.error("Failed to setup virtual environment")
             return False
-        
+
         # Start resource monitoring
         self.resource_monitor.start_monitoring()
-        
+
         # Initial task scan
         self._scan_and_load_tasks()
-        
+
         # Start main loop
         self.running = True
         self._main_loop()
-        
+
         return True
-    
+
     def stop(self):
         """Stop the task scheduler"""
         logger.info("Stopping Task Scheduler")
         self.running = False
         self.resource_monitor.stop_monitoring()
-    
+
     def restart(self):
         """Request scheduler restart"""
         logger.info("Restart requested")
@@ -203,7 +210,7 @@ class TaskScheduler:
         import schedule
 
         # Get cron-like jobs from our separate list
-        cron_jobs = getattr(schedule, '_cron_like_jobs', [])
+        cron_jobs = getattr(schedule, "_cron_like_jobs", [])
         pending_jobs = [job for job in cron_jobs if job.should_run()]
 
         if cron_jobs:
@@ -232,10 +239,10 @@ class TaskScheduler:
                     last_config_check = current_time
 
                 # Scan for new/changed tasks
-                if current_time - last_task_scan >= self.config['scheduler']['task_check_interval']:
+                if current_time - last_task_scan >= self.config["scheduler"]["task_check_interval"]:
                     self._scan_and_load_tasks()
                     last_task_scan = current_time
-                
+
                 # Run our custom cron-like jobs
                 logger.debug("Running cron-like jobs")
                 self._run_cron_like_jobs()
@@ -248,31 +255,34 @@ class TaskScheduler:
                 logger.debug("Syncing schedules with database")
                 loaded_task_names = set(self._loaded_tasks.keys())
                 self.schedule_manager.sync_schedules_with_database(loaded_task_names)
-                
+
                 # Memory cleanup
-                if current_time - last_memory_cleanup >= self.config['scheduler']['memory_cleanup_interval']:
+                if (
+                    current_time - last_memory_cleanup
+                    >= self.config["scheduler"]["memory_cleanup_interval"]
+                ):
                     self.memory_manager.cleanup_memory()
                     last_memory_cleanup = current_time
-                
+
                 # Check if restart is needed due to high memory usage
                 if self.memory_manager.is_memory_usage_high():
                     logger.warning("High memory usage detected, requesting restart")
                     self.restart()
                     break
-                
+
                 # Sleep until next iteration (but check for shutdown every second)
-                loop_interval = self.config['scheduler']['loop_interval']
+                loop_interval = self.config["scheduler"]["loop_interval"]
                 for _ in range(loop_interval):
                     if not self.running:
                         break
                     time.sleep(1)
-                
+
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
-                time.sleep(self.config['scheduler']['loop_interval'])
-        
+                time.sleep(self.config["scheduler"]["loop_interval"])
+
         logger.info("Main loop stopped")
-    
+
     def _scan_and_load_tasks(self):
         """Scan tasks directory and load/reload tasks as needed"""
         try:
@@ -282,68 +292,70 @@ class TaskScheduler:
             self._scan_and_install_helper_dependencies()
 
             # Get all task files
-            include_example_tasks = self.config.get('tasks', {}).get('include_example_tasks', True)
-            task_files = self.task_parser.scan_tasks_directory(self.tasks_dir, include_example_tasks)
+            include_example_tasks = self.config.get("tasks", {}).get("include_example_tasks", True)
+            task_files = self.task_parser.scan_tasks_directory(
+                self.tasks_dir, include_example_tasks
+            )
 
             # Track current task names
             current_tasks = set()
-            
+
             for task_file in task_files:
                 task_name = task_file.path.stem
                 current_tasks.add(task_name)
-                
+
                 # Check if task needs loading/reloading
                 needs_reload = (
-                    task_name not in self._loaded_tasks or
-                    self._loaded_tasks[task_name].file_hash != task_file.file_hash or
-                    self.task_module_manager.check_for_changes(task_file.path)
+                    task_name not in self._loaded_tasks
+                    or self._loaded_tasks[task_name].file_hash != task_file.file_hash
+                    or self.task_module_manager.check_for_changes(task_file.path)
                 )
-                
+
                 if needs_reload:
                     self._load_task(task_file)
-            
+
             # Remove tasks that no longer exist
             removed_tasks = set(self._loaded_tasks.keys()) - current_tasks
             for task_name in removed_tasks:
                 self._unload_task(task_name)
-            
+
             StructuredLogger.log_scheduler_event(
                 "task_scan_completed",
                 f"Scanned {len(task_files)} tasks, {len(current_tasks)} active",
                 active_tasks=len(current_tasks),
-                total_files=len(task_files)
+                total_files=len(task_files),
             )
-            
+
         except Exception as e:
             logger.error(f"Error scanning tasks: {e}")
-    
+
     def _load_task(self, task_file: TaskFile):
         """Load or reload a single task"""
         try:
             task_name = task_file.path.stem
             logger.info(f"Loading task: {task_name}")
-            
+
             # Install dependencies if needed
             if task_file.metadata.dependencies:
                 if not self._install_task_dependencies(task_file):
                     logger.error(f"Failed to install dependencies for task {task_name}")
                     return False
-            
+
             # Load the task module
             module = self.task_module_manager.load_task_module(task_file.path, task_file.content)
             if not module:
                 logger.error(f"Failed to load module for task {task_name}")
                 return False
-            
+
             # Remove existing schedule if reloading
             if task_name in self._loaded_tasks:
                 self._remove_task_from_schedule(task_name)
-            
+
             # Execute the module to register schedules
             try:
                 # The module's start function should be decorated with @repeat()
                 # which will automatically register it with the schedule
-                if hasattr(module, 'start') and hasattr(module.start, '_task_name'):
+                if hasattr(module, "start") and hasattr(module.start, "_task_name"):
                     logger.info(f"Task {task_name} registered with scheduler")
 
                     # Ensure initial schedule is recorded in database
@@ -354,96 +366,98 @@ class TaskScheduler:
             except Exception as e:
                 logger.error(f"Error registering task {task_name}: {e}")
                 return False
-            
+
             # Update loaded tasks
             self._loaded_tasks[task_name] = task_file
-            
+
             StructuredLogger.log_scheduler_event(
                 "task_loaded",
                 f"Task {task_name} loaded successfully",
                 task_name=task_name,
-                dependencies=len(task_file.metadata.dependencies)
+                dependencies=len(task_file.metadata.dependencies),
             )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error loading task {task_file.path}: {e}")
             return False
-    
+
     def _unload_task(self, task_name: str):
         """Unload a task"""
         try:
             logger.info(f"Unloading task: {task_name}")
-            
+
             # Remove from schedule
             self._remove_task_from_schedule(task_name)
-            
+
             # Unload module
             if task_name in self._loaded_tasks:
                 task_file = self._loaded_tasks[task_name]
                 self.task_module_manager.unload_task_module(task_file.path)
                 del self._loaded_tasks[task_name]
-            
+
             # Deactivate in database
             self.db_manager.deactivate_task(task_name)
-            
+
             StructuredLogger.log_scheduler_event(
-                "task_unloaded",
-                f"Task {task_name} unloaded",
-                task_name=task_name
+                "task_unloaded", f"Task {task_name} unloaded", task_name=task_name
             )
-            
+
         except Exception as e:
             logger.error(f"Error unloading task {task_name}: {e}")
-    
+
     def _remove_task_from_schedule(self, task_name: str):
         """Remove a task from the schedule"""
         # Remove from standard schedule library jobs
         jobs_to_remove = []
         for job in schedule.jobs:
-            if hasattr(job.job_func, '_task_name') and job.job_func._task_name.endswith(task_name):
+            if hasattr(job.job_func, "_task_name") and job.job_func._task_name.endswith(task_name):
                 jobs_to_remove.append(job)
 
         for job in jobs_to_remove:
             schedule.cancel_job(job)
 
         # Remove from cron-like jobs
-        if hasattr(schedule, '_cron_like_jobs'):
+        if hasattr(schedule, "_cron_like_jobs"):
             cron_jobs_to_remove = []
             for job in schedule._cron_like_jobs:
-                if hasattr(job.job_func, '_task_name') and job.job_func._task_name.endswith(task_name):
+                if hasattr(job.job_func, "_task_name") and job.job_func._task_name.endswith(
+                    task_name
+                ):
                     cron_jobs_to_remove.append(job)
 
             for job in cron_jobs_to_remove:
                 schedule._cron_like_jobs.remove(job)
-    
+
     def _install_task_dependencies(self, task_file: TaskFile) -> bool:
         """Install dependencies for a task"""
         if not task_file.metadata.dependencies:
             return True
-        
+
         try:
-            logger.info(f"Installing dependencies for task {task_file.path.stem}: {task_file.metadata.dependencies}")
-            
+            logger.info(
+                f"Installing dependencies for task {task_file.path.stem}: {task_file.metadata.dependencies}"
+            )
+
             # Check if dependencies have changed
             if not self.venv_manager.check_requirements_changed(task_file.metadata.dependencies):
                 logger.debug(f"Dependencies unchanged for task {task_file.path.stem}")
                 return True
-            
+
             # Install dependencies
             success = self.venv_manager.install_requirements(task_file.metadata.dependencies)
-            
+
             if success:
                 StructuredLogger.log_scheduler_event(
                     "dependencies_installed",
                     f"Dependencies installed for task {task_file.path.stem}",
                     task_name=task_file.path.stem,
-                    dependencies=task_file.metadata.dependencies
+                    dependencies=task_file.metadata.dependencies,
                 )
             else:
                 logger.error(f"Failed to install dependencies for task {task_file.path.stem}")
-            
+
             return success
 
         except Exception as e:
@@ -461,7 +475,9 @@ class TaskScheduler:
             logger.debug("Scanning helpers directory for dependencies")
 
             # Get all helper files (always include example helpers for dependency scanning)
-            helper_files = self.task_parser.scan_tasks_directory(helpers_dir, include_example_tasks=True)
+            helper_files = self.task_parser.scan_tasks_directory(
+                helpers_dir, include_example_tasks=True
+            )
 
             # Collect all dependencies from helpers
             all_helper_dependencies = []
@@ -495,7 +511,7 @@ class TaskScheduler:
                     StructuredLogger.log_scheduler_event(
                         "helper_dependencies_installed",
                         f"Helper dependencies installed: {unique_dependencies}",
-                        dependencies=unique_dependencies
+                        dependencies=unique_dependencies,
                     )
                 else:
                     logger.error("Failed to install helper dependencies")
@@ -504,16 +520,17 @@ class TaskScheduler:
 
         except Exception as e:
             logger.error(f"Error scanning helper dependencies: {e}")
-    
+
     def _ensure_initial_schedule_recorded(self, task_name: str):
         """Ensure the initial schedule for a task is recorded in the database"""
         try:
             # Find the corresponding schedule job using our registry
-            from .decorators import _job_task_registry, CronLikeJob
+            from .decorators import CronLikeJob, _job_task_registry
+
             matching_job = None
 
             # First check CronLikeJob objects (stored separately)
-            cron_jobs = getattr(schedule, '_cron_like_jobs', [])
+            cron_jobs = getattr(schedule, "_cron_like_jobs", [])
             for job in cron_jobs:
                 if isinstance(job, CronLikeJob):
                     if job.job_func in _job_task_registry:
@@ -521,10 +538,10 @@ class TaskScheduler:
                         if job_task_name == task_name:
                             matching_job = job
                             break
-                    elif hasattr(job.job_func, '_task_name'):
+                    elif hasattr(job.job_func, "_task_name"):
                         job_task_name = job.job_func._task_name
-                        if '.' in job_task_name:
-                            job_task_name = job_task_name.split('.')[-1]
+                        if "." in job_task_name:
+                            job_task_name = job_task_name.split(".")[-1]
 
                         if job_task_name == task_name:
                             matching_job = job
@@ -534,16 +551,16 @@ class TaskScheduler:
             if not matching_job:
                 for job in schedule.jobs:
                     # Handle regular schedule jobs
-                    if hasattr(job, 'job_func'):
+                    if hasattr(job, "job_func"):
                         if job.job_func in _job_task_registry:
                             job_task_name = _job_task_registry[job.job_func]
                             if job_task_name == task_name:
                                 matching_job = job
                                 break
-                        elif hasattr(job.job_func, '_task_name'):
+                        elif hasattr(job.job_func, "_task_name"):
                             job_task_name = job.job_func._task_name
-                            if '.' in job_task_name:
-                                job_task_name = job_task_name.split('.')[-1]
+                            if "." in job_task_name:
+                                job_task_name = job_task_name.split(".")[-1]
 
                             if job_task_name == task_name:
                                 matching_job = job
@@ -556,21 +573,26 @@ class TaskScheduler:
                 if not existing_schedule:
                     # Create initial schedule record
                     from .database import TaskSchedule
+
                     # Ensure consistent datetime format (replace space with T for ISO format)
                     next_run_time = matching_job.next_run
                     if isinstance(next_run_time, datetime):
                         # Convert to consistent ISO format
-                        next_run_time = next_run_time.replace(microsecond=0)  # Remove microseconds for consistency
+                        next_run_time = next_run_time.replace(
+                            microsecond=0
+                        )  # Remove microseconds for consistency
 
                     initial_schedule = TaskSchedule(
                         task_name=task_name,
                         next_run_time=next_run_time,
                         schedule_config=str(matching_job),  # Store job description
                         last_updated=datetime.now(),
-                        is_active=True
+                        is_active=True,
                     )
                     self.db_manager.update_task_schedule(initial_schedule)
-                    logger.info(f"Initial schedule recorded for task {task_name}: next run at {matching_job.next_run}")
+                    logger.info(
+                        f"Initial schedule recorded for task {task_name}: next run at {matching_job.next_run}"
+                    )
                 else:
                     logger.debug(f"Schedule already exists for task {task_name}")
             else:
@@ -587,5 +609,5 @@ class TaskScheduler:
             "scheduled_jobs": len(schedule.jobs),
             "memory_usage": self.memory_manager.get_memory_usage(),
             "system_stats": self.resource_monitor.get_system_stats(),
-            "venv_info": self.venv_manager.get_environment_info()
+            "venv_info": self.venv_manager.get_environment_info(),
         }

@@ -10,9 +10,10 @@ timeout: 60
 
 from datetime import datetime
 
-from task_scheduler.decorators import repeat, every
+from helpers import log_error, log_execution_result, log_info, log_task_complete, log_task_start
 from helpers.system_notifications import send_and_log_notification
-from helpers import log_task_start, log_task_complete, log_info, log_error, log_execution_result
+from task_scheduler.decorators import every, repeat
+
 
 @repeat(every(5).minutes)
 def start():
@@ -34,11 +35,7 @@ def start():
         print(f"Sending notification: '{title}'")
 
         result = send_and_log_notification(
-            title=title,
-            message=message,
-            timeout=8,
-            urgency="normal",
-            app_name="Task Scheduler"
+            title=title, message=message, timeout=8, urgency="normal", app_name="Task Scheduler"
         )
 
         # Log the execution result
@@ -48,8 +45,8 @@ def start():
             details={
                 "method": result.get("method"),
                 "log_file": result.get("log_file"),
-                "title": title
-            }
+                "title": title,
+            },
         )
 
         # Log the result
