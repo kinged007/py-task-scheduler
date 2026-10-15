@@ -4,9 +4,6 @@
 
 A Python background task scheduler with cron-like clock-boundary execution, per-task dependency isolation and SQLite-backed run tracking. Tasks are plain `*.py` files with YAML frontmatter and a `start()` entry point — discovered and hot-reloaded without restarts.
 
-![Demo](./docs/screenshot.png)
-<!-- Screenshot to be added: capture `python main.py --help` + a task run from logs/tasks.log. Place file at docs/screenshot.png. -->
-
 Super simple example task:
 
 ```python
