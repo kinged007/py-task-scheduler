@@ -44,5 +44,5 @@ See `README.md` for frontmatter reference, scheduling model and usage.
 ## Permissions and scope
 
 - No secrets in commits. `config/secrets.yaml` and `config/*_secrets.yaml` are gitignored; commit only `*.example` templates.
-- Do not publish anything derived from the private `tenantflex` org. See workspace `docs/03-tenantflex.md` — no tenantflex code in this repo.
+- Keep this repo self-contained. Do not copy private code without explicit owner approval.
 - Do not delete, archive or change visibility of the repo without explicit approval.
