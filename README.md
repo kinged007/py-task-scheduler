@@ -1,6 +1,11 @@
-# Task Scheduler
+# py-task-scheduler — Task Scheduler
 
-A robust Python background task management system that automatically handles dependencies, scheduling, overdue handling and execution of tasks with built-in memory management and monitoring.
+[![CI](https://github.com/kinged007/py-task-scheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/kinged007/py-task-scheduler/actions/workflows/ci.yml) [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org) [![Version](https://img.shields.io/badge/version-1.0.0-informational)](setup.py) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A Python background task scheduler with cron-like clock-boundary execution, per-task dependency isolation and SQLite-backed run tracking. Tasks are plain `*.py` files with YAML frontmatter and a `start()` entry point — discovered and hot-reloaded without restarts.
+
+![Demo](./docs/screenshot.png)
+<!-- Screenshot to be added: capture `python main.py --help` + a task run from logs/tasks.log. Place file at docs/screenshot.png. -->
 
 Super simple example task:
 
@@ -18,10 +23,11 @@ timeout: 60
 from task_scheduler.decorators import repeat, every
 from helpers import log_task_start, log_task_complete, log_info
 
+
 @repeat(every(10).minutes)
 def start():
     """This function will be called every 10 minutes at clock boundaries"""
-    log_info("Hello from scheduled task!") # Logs to logs/tasks.log with [Hello World Task] prefix
+    log_info("Hello from scheduled task!")  # Logs to logs/tasks.log with [Hello World Task] prefix
 ```
 
 Comes with more built in example tasks to get you started.
@@ -83,8 +89,8 @@ task-scheduler/
 
 1. **Clone or download the project**:
    ```bash
-   git clone https://github.com/kinged007/myautohub
-   cd task-scheduler
+   git clone https://github.com/kinged007/py-task-scheduler
+   cd py-task-scheduler
    ```
 
 2. **Run the installation script** (requires root):
@@ -102,8 +108,8 @@ task-scheduler/
 
 1. **Setup the project**:
    ```bash
-   git clone https://github.com/kinged007/myautohub
-   cd task-scheduler
+   git clone https://github.com/kinged007/py-task-scheduler
+   cd py-task-scheduler
    python3 -m venv venv
    source venv/bin/activate
    pip install -r requirements.txt
@@ -159,6 +165,7 @@ timeout: 300
 
 from task_scheduler.decorators import repeat, every
 import requests
+
 
 @repeat(every(10).minutes)
 def start():
@@ -341,16 +348,20 @@ The scheduler includes a comprehensive helper system that provides reusable func
 # Import everything you need from the helpers package
 from helpers import (
     # Configuration management
-    load_config, get_config_value, save_config,
-
+    load_config,
+    get_config_value,
+    save_config,
     # Logging
-    log, log_info, log_error, log_warning,
-
+    log,
+    log_info,
+    log_error,
+    log_warning,
     # System notifications
-    send_notification, send_and_log_notification,
-
+    send_notification,
+    send_and_log_notification,
     # External execution
-    execute_python_script, execute_cli_command
+    execute_python_script,
+    execute_cli_command,
 )
 ```
 
@@ -702,17 +713,12 @@ from helpers import send_notification, send_and_log_notification
 
 # Send a simple notification
 result = send_notification(
-    title="Task Complete",
-    message="Your task finished successfully!",
-    timeout=5,
-    urgency="normal"
+    title="Task Complete", message="Your task finished successfully!", timeout=5, urgency="normal"
 )
 
 # Send and automatically log notification
 result = send_and_log_notification(
-    title="Status Update",
-    message="System is running normally",
-    log_dir="data"
+    title="Status Update", message="System is running normally", log_dir="data"
 )
 ```
 
@@ -726,17 +732,11 @@ from helpers import execute_python_script, execute_cli_command, process_executio
 
 # Execute a Python script
 result = execute_python_script(
-    script_path="/path/to/script.py",
-    args=["arg1", "arg2"],
-    cwd="/working/directory",
-    timeout=60
+    script_path="/path/to/script.py", args=["arg1", "arg2"], cwd="/working/directory", timeout=60
 )
 
 # Execute CLI commands
-result = execute_cli_command(
-    command="git status --porcelain",
-    cwd="/repo/path"
-)
+result = execute_cli_command(command="git status --porcelain", cwd="/repo/path")
 
 # Process multiple execution results
 summary = process_execution_results([result1, result2, result3])
@@ -750,6 +750,7 @@ Easy-to-use logging utilities with automatic task name detection:
 
 ```python
 from helpers import log_info, log_error, log_task_start, log_task_complete
+
 
 @repeat(every(5).minutes)
 def start():
@@ -805,6 +806,7 @@ timeout: 300
 
 from task_scheduler.decorators import repeat, every
 from datetime import datetime
+
 
 @repeat(every(5).minutes)  # Runs at :00, :05, :10, :15, etc.
 def start():
@@ -872,14 +874,14 @@ tail -f logs/tasks.log                         # Monitor task execution
 
 ```bash
 # Clone and setup
-git clone https://github.com/kinged007/myautohub
-cd task-scheduler
+git clone https://github.com/kinged007/py-task-scheduler
+cd py-task-scheduler
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
 # Run tests to verify setup
-python scripts/run_tests.py
+pytest -v
 
 # Run scheduler in development mode
 python main.py --config config/config.yaml

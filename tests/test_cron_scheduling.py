@@ -2,8 +2,8 @@
 Test the cron-like scheduling functionality
 """
 
-import pytest
 from datetime import datetime
+
 from task_scheduler.decorators import CronLikeInterval, CronLikeJob
 
 
@@ -12,34 +12,44 @@ class TestCronScheduling:
 
     def test_minute_alignment(self):
         """Test that minute intervals align to clock boundaries"""
+
         def dummy_task():
             pass
-        
+
         # Test 5-minute intervals
-        job = CronLikeJob(5, 'minutes', dummy_task)
+        job = CronLikeJob(5, "minutes", dummy_task)
         next_minute = job.next_run.minute
-        assert next_minute % 5 == 0, f"5-minute alignment incorrect: {next_minute} is not divisible by 5"
-        
-        # Test 1-minute intervals  
-        job1 = CronLikeJob(1, 'minutes', dummy_task)
+        assert next_minute % 5 == 0, (
+            f"5-minute alignment incorrect: {next_minute} is not divisible by 5"
+        )
+
+        # Test 1-minute intervals
+        job1 = CronLikeJob(1, "minutes", dummy_task)
         # Should be aligned to next minute boundary
         assert job1.next_run.second == 0, "1-minute job should align to minute boundary"
-        
+
         # Test 10-minute intervals
-        job10 = CronLikeJob(10, 'minutes', dummy_task)
+        job10 = CronLikeJob(10, "minutes", dummy_task)
         next_minute_10 = job10.next_run.minute
-        assert next_minute_10 % 10 == 0, f"10-minute alignment incorrect: {next_minute_10} is not divisible by 10"
+        assert next_minute_10 % 10 == 0, (
+            f"10-minute alignment incorrect: {next_minute_10} is not divisible by 10"
+        )
 
     def test_hour_alignment(self):
         """Test that hour intervals align to clock boundaries"""
+
         def dummy_task():
             pass
-        
-        job = CronLikeJob(1, 'hours', dummy_task)
-        
+
+        job = CronLikeJob(1, "hours", dummy_task)
+
         # Check that it's at the top of the hour
-        assert job.next_run.minute == 0, f"Hour alignment incorrect: minute should be 0, got {job.next_run.minute}"
-        assert job.next_run.second == 0, f"Hour alignment incorrect: second should be 0, got {job.next_run.second}"
+        assert job.next_run.minute == 0, (
+            f"Hour alignment incorrect: minute should be 0, got {job.next_run.minute}"
+        )
+        assert job.next_run.second == 0, (
+            f"Hour alignment incorrect: second should be 0, got {job.next_run.second}"
+        )
 
     def test_multiple_runs(self):
         """Test that subsequent runs maintain alignment"""
@@ -48,7 +58,7 @@ class TestCronScheduling:
         def dummy_task():
             pass
 
-        job = CronLikeJob(5, 'minutes', dummy_task)
+        job = CronLikeJob(5, "minutes", dummy_task)
         first_run = job.next_run
 
         # Wait a small amount to ensure time progresses
@@ -73,36 +83,38 @@ class TestCronScheduling:
 
     def test_should_run_logic(self):
         """Test the should_run method"""
+
         def dummy_task():
             pass
-        
-        job = CronLikeJob(5, 'minutes', dummy_task)
-        
+
+        job = CronLikeJob(5, "minutes", dummy_task)
+
         # Should not run immediately (next_run is in the future)
         assert not job.should_run(), "Job should not run immediately after creation"
 
     def test_cron_like_interval_creation(self):
         """Test CronLikeInterval creation and properties"""
         interval = CronLikeInterval(5)
-        
+
         # Test minutes property
         minutes_interval = interval.minutes
-        assert minutes_interval._unit == 'minutes'
+        assert minutes_interval._unit == "minutes"
         assert minutes_interval._use_cron_like is True
-        
-        # Test hours property  
+
+        # Test hours property
         interval2 = CronLikeInterval(2)
         hours_interval = interval2.hours
-        assert hours_interval._unit == 'hours'
+        assert hours_interval._unit == "hours"
         assert hours_interval._use_cron_like is True
 
     def test_job_string_representation(self):
         """Test job string representation"""
+
         def dummy_task():
             pass
-        
-        job = CronLikeJob(5, 'minutes', dummy_task)
+
+        job = CronLikeJob(5, "minutes", dummy_task)
         job_str = str(job)
-        
+
         assert "Every 5 minutes" in job_str
         assert "next run:" in job_str

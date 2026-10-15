@@ -16,15 +16,15 @@ Options:
     --help          Show this help message
 """
 
-import sys
-import os
-import time
-import signal
 import argparse
+import signal
 import subprocess
-import psutil
+import sys
+import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List
+
+import psutil
 
 # Add project directory to path
 project_dir = Path(__file__).parent.parent
@@ -40,10 +40,11 @@ def find_scheduler_processes() -> List[psutil.Process]:
 
     # First try using pgrep for more reliable process finding
     try:
-        result = subprocess.run(['pgrep', '-f', 'myautohub-scheduler'],
-                              capture_output=True, text=True)
+        result = subprocess.run(
+            ["pgrep", "-f", "myautohub-scheduler"], capture_output=True, text=True
+        )
         if result.returncode == 0:
-            pids = [int(pid.strip()) for pid in result.stdout.strip().split('\n') if pid.strip()]
+            pids = [int(pid.strip()) for pid in result.stdout.strip().split("\n") if pid.strip()]
             for pid in pids:
                 try:
                     proc = psutil.Process(pid)
@@ -66,27 +67,25 @@ def find_scheduler_processes() -> List[psutil.Process]:
                 continue
 
             # Check for our specific process name (truncated)
-            if 'myautohub' in name:
+            if "myautohub" in name:
                 processes.append(proc)
                 continue
 
             # Check command line for scheduler indicators
             if cmdline:
-                cmdline_str = ' '.join(cmdline)
+                cmdline_str = " ".join(cmdline)
 
                 # Look for main.py in myautohub directory
-                if 'main.py' in cmdline_str and 'myautohub' in cmdline_str:
+                if "main.py" in cmdline_str and "myautohub" in cmdline_str:
                     processes.append(proc)
                     continue
 
                 # Check for python processes running our main.py
-                if (len(cmdline) >= 2 and
-                    'python' in cmdline[0] and
-                    'main.py' in cmdline[1]):
+                if len(cmdline) >= 2 and "python" in cmdline[0] and "main.py" in cmdline[1]:
                     # Verify it's our main.py by checking working directory or path
                     try:
                         cwd = proc.cwd()
-                        if 'myautohub' in cwd:
+                        if "myautohub" in cwd:
                             processes.append(proc)
                             continue
                     except (psutil.AccessDenied, psutil.NoSuchProcess):
@@ -94,7 +93,7 @@ def find_scheduler_processes() -> List[psutil.Process]:
 
                     # Fallback: check if any argument contains myautohub
                     for arg in cmdline:
-                        if 'myautohub' in arg:
+                        if "myautohub" in arg:
                             processes.append(proc)
                             break
 
@@ -137,7 +136,7 @@ def force_kill(process):
     try:
         print(f"Force killing process {process.pid}...")
         process.kill()
-        
+
         # Wait a bit to ensure it's dead
         try:
             process.wait(timeout=5)
@@ -146,7 +145,7 @@ def force_kill(process):
         except psutil.TimeoutExpired:
             print(f"Process {process.pid} still running after force kill")
             return False
-            
+
     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
         print(f"Failed to force kill process {process.pid}: {e}")
         return False
@@ -157,7 +156,9 @@ def start_scheduler(config_path, daemon=False):
     try:
         # Get the correct Python executable from config
         config_name = Path(config_path).name if config_path else "config.yaml"
-        python_executable = get_config_value('virtual_env.python_executable', config_name, default='python3')
+        python_executable = get_config_value(
+            "virtual_env.python_executable", config_name, default="python3"
+        )
 
         # Use the venv python if it exists, otherwise use the configured executable
         venv_python = project_dir / "venv" / "bin" / "python"
@@ -175,7 +176,7 @@ def start_scheduler(config_path, daemon=False):
 
         # Always start as a detached background process
         # This ensures the scheduler runs independently of the restart script
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             # Windows: use CREATE_NEW_PROCESS_GROUP
             process = subprocess.Popen(
                 cmd,
@@ -183,7 +184,7 @@ def start_scheduler(config_path, daemon=False):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
         else:
             # Unix/Linux/macOS: use start_new_session
@@ -193,7 +194,7 @@ def start_scheduler(config_path, daemon=False):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
-                start_new_session=True
+                start_new_session=True,
             )
 
         print(f"Scheduler process started with PID: {process.pid}")
@@ -221,62 +222,51 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Restart MyAutoHub Task Scheduler",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog=__doc__,
     )
-    
+
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Force kill the process if graceful shutdown fails"
+        "--force", action="store_true", help="Force kill the process if graceful shutdown fails"
     )
-    
+
     parser.add_argument(
-        "--timeout",
-        type=int,
-        default=10,
-        help="Wait N seconds for graceful shutdown (default: 10)"
+        "--timeout", type=int, default=10, help="Wait N seconds for graceful shutdown (default: 10)"
     )
-    
+
     parser.add_argument(
         "--config",
         type=Path,
         default=project_dir / "config" / "config.yaml",
-        help="Path to config file"
+        help="Path to config file",
     )
-    
+
+    parser.add_argument("--daemon", action="store_true", help="Start as daemon process")
+
     parser.add_argument(
-        "--daemon",
-        action="store_true",
-        help="Start as daemon process"
+        "--dry-run", action="store_true", help="Show what would be done without actually doing it"
     )
-    
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without actually doing it"
-    )
-    
+
     return parser.parse_args()
 
 
 def main():
     """Main entry point"""
     args = parse_arguments()
-    
+
     print("🔄 MyAutoHub Scheduler Restart Tool")
     print("=" * 40)
-    
+
     if args.dry_run:
         print("🔍 DRY RUN MODE - No changes will be made")
         print()
-    
+
     # Find existing processes
     processes = find_scheduler_processes()
-    
+
     if not processes:
         print("ℹ️  No scheduler processes found")
         print("🚀 Starting new scheduler...")
-        
+
         if not args.dry_run:
             success = start_scheduler(args.config, args.daemon)
             if success:
@@ -288,29 +278,29 @@ def main():
         else:
             print("🔍 Would start scheduler (dry run)")
             return 0
-    
+
     print(f"📋 Found {len(processes)} scheduler process(es):")
     for proc in processes:
         try:
             print(f"   PID {proc.pid}: {' '.join(proc.cmdline())}")
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             print(f"   PID {proc.pid}: <access denied>")
-    
+
     print()
-    
+
     # Stop existing processes
     stopped_all = True
     for proc in processes:
         if args.dry_run:
             print(f"🔍 Would stop process {proc.pid} (dry run)")
             continue
-            
+
         print(f"🛑 Stopping process {proc.pid}...")
-        
+
         # Try graceful shutdown first
         if graceful_shutdown(proc, args.timeout):
             continue
-            
+
         # Force kill if requested and graceful failed
         if args.force:
             if not force_kill(proc):
@@ -318,19 +308,19 @@ def main():
         else:
             print(f"❌ Process {proc.pid} did not stop gracefully. Use --force to kill it.")
             stopped_all = False
-    
+
     if not stopped_all and not args.dry_run:
         print("❌ Failed to stop all processes")
         return 1
-    
+
     if args.dry_run:
         print("🔍 Would start new scheduler (dry run)")
         return 0
-    
+
     # Start new process
     print("🚀 Starting new scheduler...")
     success = start_scheduler(args.config, args.daemon)
-    
+
     if success:
         print("✅ Scheduler restarted successfully")
         return 0

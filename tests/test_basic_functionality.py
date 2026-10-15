@@ -2,8 +2,9 @@
 Test basic Task Scheduler functionality
 """
 
-import pytest
 import subprocess
+
+import pytest
 
 
 class TestBasicFunctionality:
@@ -13,15 +14,15 @@ class TestBasicFunctionality:
         """Test that virtual environment exists and is properly configured"""
         venv_dir = project_root / "venv"
         assert venv_dir.exists(), "Virtual environment directory not found"
-        
+
         # Check if required packages are available
         result = subprocess.run(
             ["bash", "-c", "source venv/bin/activate && pip list"],
             cwd=project_root,
             capture_output=True,
-            text=True
+            text=True,
         )
-        
+
         assert result.returncode == 0, "Failed to activate virtual environment"
         assert "schedule" in result.stdout, "schedule package not installed"
         assert "loguru" in result.stdout, "loguru package not installed"
@@ -36,8 +37,8 @@ class TestBasicFunctionality:
             db_file.unlink()
 
         # Run scheduler briefly using Python's signal handling
-        import signal
         import os
+        import signal
 
         # Start scheduler process
         process = subprocess.Popen(
@@ -45,11 +46,12 @@ class TestBasicFunctionality:
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid  # Create new process group
+            preexec_fn=os.setsid,  # Create new process group
         )
 
         # Wait a bit for scheduler to start and create database
         import time
+
         time.sleep(3)
 
         # Terminate the process group
@@ -71,8 +73,8 @@ class TestBasicFunctionality:
         log_file = project_root / "logs" / "scheduler.log"
 
         # Run scheduler briefly using signal handling (macOS compatible)
-        import signal
         import os
+        import signal
         import time
 
         process = subprocess.Popen(
@@ -80,7 +82,7 @@ class TestBasicFunctionality:
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid
+            preexec_fn=os.setsid,
         )
 
         time.sleep(2)  # Wait for log creation
@@ -93,14 +95,14 @@ class TestBasicFunctionality:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
-        
+
         # Log file should be created
         assert log_file.exists(), "Log file was not created"
-        
+
         # Check log content
-        with open(log_file, 'r') as f:
+        with open(log_file, "r") as f:
             log_content = f.read()
-        
+
         assert "Task Scheduler Starting" in log_content, "Expected log content not found"
 
     def test_task_loading(self, project_root):
@@ -108,8 +110,8 @@ class TestBasicFunctionality:
         log_file = project_root / "logs" / "scheduler.log"
 
         # Run scheduler briefly using signal handling (macOS compatible)
-        import signal
         import os
+        import signal
         import time
 
         process = subprocess.Popen(
@@ -117,7 +119,7 @@ class TestBasicFunctionality:
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid
+            preexec_fn=os.setsid,
         )
 
         time.sleep(3)  # Wait for task loading
@@ -130,27 +132,29 @@ class TestBasicFunctionality:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
-        
+
         # Check if tasks were loaded
         if log_file.exists():
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 log_content = f.read()
-            
+
             # Should see task registration messages
             assert "registered with scheduler" in log_content, "No tasks were registered"
-            
+
             # Should see specific example tasks
             example_tasks = ["example_hello_world", "shutdown_reminder"]
             for task in example_tasks:
                 if f"Loading task: {task}" in log_content:
-                    assert f"Task {task} registered with scheduler" in log_content, f"Task {task} failed to register"
+                    assert f"Task {task} registered with scheduler" in log_content, (
+                        f"Task {task} failed to register"
+                    )
 
     @pytest.mark.slow
     def test_scheduler_runs_without_errors(self, project_root):
         """Test that scheduler can run for a short period without errors"""
         # Run scheduler for a few seconds using signal handling
-        import signal
         import os
+        import signal
         import time
 
         process = subprocess.Popen(
@@ -158,7 +162,7 @@ class TestBasicFunctionality:
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid
+            preexec_fn=os.setsid,
         )
 
         time.sleep(5)  # Run for 5 seconds
@@ -174,7 +178,7 @@ class TestBasicFunctionality:
                 stderr = b""
 
         # Check for critical errors in stderr
-        stderr_text = stderr.decode('utf-8', errors='ignore')
+        stderr_text = stderr.decode("utf-8", errors="ignore")
         critical_errors = ["Traceback", "Error:", "Exception:", "CRITICAL"]
         for error in critical_errors:
             assert error not in stderr_text, f"Critical error found in stderr: {stderr_text}"
@@ -182,8 +186,8 @@ class TestBasicFunctionality:
     def test_config_loading(self, project_root):
         """Test that configuration is loaded properly"""
         # This is tested indirectly by checking if scheduler starts without config errors
-        import signal
         import os
+        import signal
         import time
 
         process = subprocess.Popen(
@@ -191,7 +195,7 @@ class TestBasicFunctionality:
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=os.setsid
+            preexec_fn=os.setsid,
         )
 
         time.sleep(2)  # Brief run to check config loading
@@ -207,7 +211,7 @@ class TestBasicFunctionality:
                 stderr = b""
 
         # Should not have config-related errors
-        stderr_text = stderr.decode('utf-8', errors='ignore')
+        stderr_text = stderr.decode("utf-8", errors="ignore")
         config_errors = ["Config file error", "Configuration error", "YAML error"]
         for error in config_errors:
             assert error not in stderr_text, f"Configuration error found: {stderr_text}"

@@ -11,8 +11,9 @@ timeout: 60
 import time
 from datetime import datetime
 
-from task_scheduler.decorators import repeat, every
-from helpers import log_task_start, log_task_complete, log_info
+from helpers import log_info, log_task_complete, log_task_start
+from task_scheduler.decorators import every, repeat
+
 
 @repeat(every(1).minutes)
 def start():

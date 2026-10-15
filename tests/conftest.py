@@ -3,8 +3,9 @@ Pytest configuration and fixtures for Task Scheduler tests
 """
 
 import sys
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Add project directory to path
 project_dir = Path(__file__).parent.parent
